@@ -3,8 +3,10 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 export default function HomeScreen() {
-  const [isRecording, setIsRecording] = useState(false);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [recordingInstance, setRecordingInstance] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
     const requestPermission = async () => {
@@ -17,12 +19,42 @@ export default function HomeScreen() {
     requestPermission();
   }, []);
 
-  const handleStartRecording = () => {
-    if (!hasPermission) {
-      Alert.alert('Permission needed', 'Please allow microphone access before recording.');
-      return;
+  const startRecording = async () => {
+    if (!hasPermission) return Alert.alert('Please grant mic access');
+    try {
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      setRecordingInstance(recording);
+      setIsRecording(true);
+      setIsPaused(false);
+    } catch {
+      Alert.alert('Error', 'Failed to start recording.');
     }
-    setIsRecording(true);
+  };
+
+  const pauseRecording = async () => {
+    if (recordingInstance) {
+      await recordingInstance.pauseAsync();
+      setIsPaused(true);
+    }
+  };
+
+  const resumeRecording = async () => {
+    if (recordingInstance) {
+      await recordingInstance.startAsync();
+      setIsPaused(false);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (recordingInstance) {
+      await recordingInstance.stopAndUnloadAsync();
+      setIsRecording(false);
+      setIsPaused(false);
+      setRecordingInstance(null);
+      Alert.alert('Recording saved', 'Your recording has been saved successfully.');
+    }
   };
 
   return (
@@ -30,11 +62,37 @@ export default function HomeScreen() {
       <Text style={styles.title}>Voice Notes App</Text>
       <Text style={styles.subtitle}>Start by recording your first voice note!</Text>
 
-      <Pressable style={styles.button} onPress={handleStartRecording}>
-        <Text style={styles.buttonText}>Start Recording</Text>
-      </Pressable>
+      {!isRecording && (
+        <Pressable style={styles.button} onPress={startRecording}>
+          <Text style={styles.buttonText}>Start Recording</Text>
+        </Pressable>
+      )}
 
-      {isRecording && <Text style={styles.status}>Recording…</Text>}
+      {isRecording && !isPaused && (
+        <View style={{ flexDirection: 'row' }}>
+          <Pressable style={styles.button} onPress={pauseRecording}>
+            <Text style={styles.buttonText}>Pause</Text>
+          </Pressable>
+          <Pressable style={styles.buttonStop} onPress={stopRecording}>
+            <Text style={styles.buttonText}>Stop</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {isRecording && isPaused && (
+        <View style={{ flexDirection: 'row' }}>
+          <Pressable style={styles.button} onPress={resumeRecording}>
+            <Text style={styles.buttonText}>Resume</Text>
+          </Pressable>
+          <Pressable style={styles.buttonStop} onPress={stopRecording}>
+            <Text style={styles.buttonText}>Stop</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {isRecording && !isPaused && <Text style={styles.status}>Recording…</Text>}
+      {isRecording && isPaused && <Text style={styles.status}>Paused</Text>}
+
       {hasPermission === false && (
         <Text style={styles.permissionWarning}>Microphone permission denied.</Text>
       )}
@@ -67,6 +125,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 8,
     marginBottom: 16,
+  },
+  buttonStop: {
+    backgroundColor: '#d00',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginBottom: 16,
+    marginLeft: 12,
   },
   buttonText: {
     color: '#fff',
